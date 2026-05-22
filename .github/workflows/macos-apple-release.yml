@@ -1,0 +1,76 @@
+name: Build and Release macOS Apple Silicon
+
+on:
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout dbeaver
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout dbeaver-common
+        uses: actions/checkout@v4
+        with:
+          repository: dbeaver/dbeaver-common
+          ref: devel
+          path: dbeaver-common
+
+      - name: Ensure Apple Silicon runner
+        shell: bash
+        run: |
+          test "$(uname -m)" = "arm64"
+
+      - name: Prepare sibling path for parent pom
+        shell: bash
+        run: |
+          ln -s "$GITHUB_WORKSPACE/dbeaver-common" "$GITHUB_WORKSPACE/../dbeaver-common"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build macOS Apple Silicon package
+        shell: bash
+        run: |
+          mvn -B -f product/aggregate/pom.xml \
+            -Pproduct-dbeaver-ce,product-dbeaver-eclipse-ce,appstore \
+            -Dos=macosx -Dws=cocoa -Darch=aarch64 \
+            package
+
+      - name: Locate built artifact
+        id: artifact
+        shell: bash
+        run: |
+          ARTIFACT_PATH="$(find "$GITHUB_WORKSPACE" -type f -name '*macosx*cocoa*aarch64*.tar.gz' | head -n 1)"
+          if [ -z "$ARTIFACT_PATH" ]; then
+            echo "No macOS Apple Silicon artifact found."
+            exit 1
+          fi
+          echo "path=$ARTIFACT_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Create release and upload artifact
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: macos-apple-${{ github.sha }}
+          name: macOS Apple Silicon ${{ github.sha }}
+          files: ${{ steps.artifact.outputs.path }}
