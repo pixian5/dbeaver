@@ -66,6 +66,10 @@ jobs:
             echo "No macOS Apple Silicon DBeaver.app found."
             exit 1
           fi
+          JRE_PATH="$APP_PATH/Contents/Eclipse/jre"
+          rm -rf "$JRE_PATH"
+          mkdir -p "$JRE_PATH/Contents"
+          ditto "$JAVA_HOME" "$JRE_PATH/Contents/Home"
           ARTIFACT_PATH="$GITHUB_WORKSPACE/DBeaver-macos-apple-silicon.app.zip"
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARTIFACT_PATH"
           echo "path=$ARTIFACT_PATH" >> "$GITHUB_OUTPUT"
