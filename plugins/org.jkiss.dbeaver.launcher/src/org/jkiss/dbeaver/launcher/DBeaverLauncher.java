@@ -2400,9 +2400,8 @@ public class DBeaverLauncher {
         try {
             final Properties config = readGlobalConfiguration();
             String nlProperty = config.getProperty(DBEAVER_PROP_LANGUAGE);
-            if (nlProperty == null || nlProperty.isBlank()) {
-                // Make English the default language
-                nlProperty = "en";
+            if (nlProperty == null || nlProperty.isBlank() || "auto".equalsIgnoreCase(nlProperty)) {
+                return;
             }
             setSystemPropertyIfNotSet(PROP_NL, nlProperty);
         } catch (IOException e) {

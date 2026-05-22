@@ -395,10 +395,6 @@ public abstract class BasePlatformImpl implements DBPPlatform, DBPApplicationCon
 
     @Override
     public void setPlatformLanguage(@NotNull DBPPlatformLanguage language) throws DBException {
-        if (CommonUtils.equalObjects(language, this.platformLanguage)) {
-            return;
-        }
-
         GlobalSettings.getInstance().setGlobalProperty(DBEAVER_PROP_LANGUAGE, language.getCode());
         this.platformLanguage = language;
         // This property is fake. But we set it to trigger property change listener

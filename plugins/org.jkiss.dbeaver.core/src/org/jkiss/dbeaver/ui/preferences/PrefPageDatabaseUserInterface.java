@@ -49,6 +49,7 @@ import org.jkiss.dbeaver.model.preferences.DBPPreferenceStore;
 import org.jkiss.dbeaver.registry.SWTBrowserRegistry;
 import org.jkiss.dbeaver.registry.language.PlatformLanguageDescriptor;
 import org.jkiss.dbeaver.registry.language.PlatformLanguageRegistry;
+import org.jkiss.dbeaver.registry.settings.GlobalSettings;
 import org.jkiss.dbeaver.registry.timezone.TimezoneRegistry;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.ui.UIUtils;
@@ -64,15 +65,20 @@ import org.jkiss.utils.StringUtils;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * PrefPageDatabaseUserInterface
  */
 public class PrefPageDatabaseUserInterface extends AbstractPrefPage implements IWorkbenchPreferencePage, IWorkbenchPropertyPage {
     public static final String PAGE_ID = "org.jkiss.dbeaver.preferences.main"; //$NON-NLS-1$
+    private static final String PLATFORM_LANGUAGE_PROPERTY = "nl";
+    private static final Set<String> SUPPORTED_LANGUAGE_CODES = Set.of("en", "zh", "tw", "ja", "de", "es", "fr", "ru");
 
     private Button automaticUpdateCheck;
     private Combo workspaceLanguage;
+    private List<PlatformLanguageDescriptor> workspaceLanguages = List.of();
 
     @Nullable
     private Combo clientTimezone;
@@ -128,17 +134,27 @@ public class PrefPageDatabaseUserInterface extends AbstractPrefPage implements I
                 SWT.READ_ONLY | SWT.DROP_DOWN
             );
             workspaceLanguage.setLayoutData(new GridData(GridData.HORIZONTAL_ALIGN_BEGINNING));
-            List<PlatformLanguageDescriptor> languages = PlatformLanguageRegistry.getInstance().getLanguages();
+            workspaceLanguage.add(CoreMessages.pref_page_ui_general_combo_language_auto_detect);
+            workspaceLanguages = PlatformLanguageRegistry.getInstance().getLanguages().stream()
+                .filter(language -> SUPPORTED_LANGUAGE_CODES.contains(language.getCode()))
+                .toList();
+
+            String configuredLanguageCode = GlobalSettings.getInstance().getGlobalProperty(PLATFORM_LANGUAGE_PROPERTY);
             DBPPlatformLanguage pLanguage = DBPPlatformDesktop.getInstance().getPlatformLanguage();
-            for (int i = 0; i < languages.size(); i++) {
-                PlatformLanguageDescriptor lang = languages.get(i);
+            for (int i = 0; i < workspaceLanguages.size(); i++) {
+                PlatformLanguageDescriptor lang = workspaceLanguages.get(i);
                 workspaceLanguage.add(lang.getLabel());
-                if (CommonUtils.equalObjects(pLanguage, lang)) {
-                    workspaceLanguage.select(i);
+                if (CommonUtils.equalObjects(configuredLanguageCode, lang.getCode())) {
+                    workspaceLanguage.select(i + 1);
                 }
             }
             if (workspaceLanguage.getSelectionIndex() < 0) {
-                workspaceLanguage.select(0);
+                if (CommonUtils.isEmpty(configuredLanguageCode)) {
+                    workspaceLanguage.select(0);
+                } else {
+                    int languageIndex = workspaceLanguages.indexOf(pLanguage);
+                    workspaceLanguage.select(languageIndex < 0 ? 0 : languageIndex + 1);
+                }
             }
 
             clientTimezone = UIUtils.createLabelCombo(regionalSettingsGroup,
@@ -361,15 +377,30 @@ public class PrefPageDatabaseUserInterface extends AbstractPrefPage implements I
             store.setValue(DBeaverPreferences.UI_STATUS_BAR_SHOW_STATUS_LINE, statusBarShowStatusCheck.getSelection());
 
             if (workspaceLanguage.getSelectionIndex() >= 0) {
-                PlatformLanguageDescriptor language = PlatformLanguageRegistry.getInstance().getLanguages()
-                    .get(workspaceLanguage.getSelectionIndex());
+                String configuredLanguageCode = GlobalSettings.getInstance().getGlobalProperty(PLATFORM_LANGUAGE_PROPERTY);
                 DBPPlatformLanguage curLanguage = DBPPlatformDesktop.getInstance().getPlatformLanguage();
+                DBPPlatformLanguage selectedLanguage;
+                if (workspaceLanguage.getSelectionIndex() == 0) {
+                    selectedLanguage = PlatformLanguageRegistry.getInstance().getLanguage(Locale.getDefault());
+                    if (selectedLanguage == null) {
+                        selectedLanguage = PlatformLanguageRegistry.getInstance().getLanguage(Locale.ENGLISH);
+                    }
+                    GlobalSettings.getInstance().setGlobalProperty(PLATFORM_LANGUAGE_PROPERTY, null);
+                } else {
+                    selectedLanguage = workspaceLanguages.get(workspaceLanguage.getSelectionIndex() - 1);
+                }
 
                 try {
-                    if (curLanguage != language) {
-                        if (DBWorkbench.getPlatform() instanceof DBPPlatformLanguageManager languageManager) {
-                            languageManager.setPlatformLanguage(language);
-                        }
+                    if (workspaceLanguage.getSelectionIndex() != 0 &&
+                        (!CommonUtils.equalObjects(curLanguage, selectedLanguage) ||
+                            !CommonUtils.equalObjects(configuredLanguageCode, selectedLanguage.getCode())) &&
+                        DBWorkbench.getPlatform() instanceof DBPPlatformLanguageManager languageManager)
+                    {
+                        languageManager.setPlatformLanguage(selectedLanguage);
+                    }
+                    if (!CommonUtils.equalObjects(curLanguage, selectedLanguage) ||
+                        (workspaceLanguage.getSelectionIndex() == 0 && !CommonUtils.isEmpty(configuredLanguageCode)))
+                    {
                         if (UIUtils.confirmAction(
                             getShell(),
                             "Restart " + GeneralUtils.getProductName(),
@@ -380,7 +411,7 @@ public class PrefPageDatabaseUserInterface extends AbstractPrefPage implements I
                         }
                     }
                 } catch (DBException e) {
-                    DBWorkbench.getPlatformUI().showError("Change language", "Can't switch language to " + language, e);
+                    DBWorkbench.getPlatformUI().showError("Change language", "Can't switch language to " + selectedLanguage, e);
                 }
             }
         }

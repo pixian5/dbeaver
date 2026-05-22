@@ -72,6 +72,15 @@ public class PlatformLanguageRegistry
                 return descriptor;
             }
         }
+        if ("zh".equals(locale.getLanguage())) {
+            String country = locale.getCountry();
+            if ("TW".equalsIgnoreCase(country) || "HK".equalsIgnoreCase(country) || "MO".equalsIgnoreCase(country)) {
+                PlatformLanguageDescriptor descriptor = getLanguage("tw");
+                if (descriptor != null) {
+                    return descriptor;
+                }
+            }
+        }
         // Try to search by language only
         for (PlatformLanguageDescriptor descriptor : descriptors) {
             if (descriptor.getCode().equals(locale.getLanguage())) {
